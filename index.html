@@ -161,19 +161,86 @@
     const statusEl = document.getElementById('status');
 
     // Cache-bust for GitHub Pages (update this if things feel "stuck")
-    const CACHE_BUST = '20260203-3';
+    const CACHE_BUST = '20260203-4';
 
     function setStatus(s){
       statusEl.textContent = s;
     }
 
-    playBtn.addEventListener('click', () => {
-      setStatus('playing…');
-      document.dispatchEvent(new CustomEvent('repl-evaluate', { cancelable: true }));
+    // "slop" easter egg: click stop 5x to arm slop mode.
+    let stopClicks = 0;
+    let slopMode = false;
+    let currentCode = '';
+
+    function randChoice(arr){
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function randStruct(len = 16, density = 0.5){
+      // returns a string like "x ~ x x ~ ..." with occasional doubles
+      const toks = [];
+      for(let i=0;i<len;i++){
+        const r = Math.random();
+        if(r < density){
+          toks.push(Math.random() < 0.15 ? '[x x]' : 'x');
+        } else {
+          toks.push('~');
+        }
+      }
+      // group into 4s for readability
+      const groups = [];
+      for(let i=0;i<toks.length;i+=4) groups.push(toks.slice(i,i+4).join(' '));
+      return groups.join('  ');
+    }
+
+    function makeSlop(code){
+      // turn const -> let so we can mutate layers after definition
+      let out = code.replace(/^const\s+/gm, 'let ');
+      const bpmDelta = randChoice([-12,-8,-4,0,4,8,12]);
+      const kickDensity = 0.55 + Math.random()*0.25;
+      const hatDensity = 0.55 + Math.random()*0.25;
+      const panAmt = (0.2 + Math.random()*0.5).toFixed(2);
+
+      out += `\n\n// --- slop mode armed (secret) ---\n`;
+      out += `// stop x5 → slop. play again → the laundromat jitters.\n`;
+      out += `BPM = Math.max(120, Math.min(180, BPM + (${bpmDelta})));\n`;
+      out += `kicks = kicks.struct(\"${randStruct(16, kickDensity)}\").gain(${(0.7+Math.random()*0.4).toFixed(2)});\n`;
+      out += `hats = hats.struct(\"${randStruct(8, hatDensity)}\").gain(${(0.2+Math.random()*0.5).toFixed(2)}).pan(sine.range(-${panAmt}, ${panAmt}).slow(${(1+Math.random()*4).toFixed(2)}));\n`;
+      out += `clicks = clicks.gain(${(0.05+Math.random()*0.18).toFixed(2)}).delaytime(${(0.0625*randChoice([1,2,3,4])).toFixed(4)});\n`;
+      out += `vacuum = vacuum.struct(\"${randStruct(16, 0.18)}\").gain(${(0.08+Math.random()*0.25).toFixed(2)});\n`;
+      out += `// re-stack with mutated layers\n`;
+      out += `stack(hum, kicks, snare, claps, hats, clicks, vacuum).cpm(BPM/4)\n`;
+
+      return out;
+    }
+
+    playBtn.addEventListener('click', async () => {
+      try {
+        await customElements.whenDefined('strudel-editor');
+        if(slopMode && currentCode){
+          repl.setAttribute('code', makeSlop(currentCode));
+          setStatus('playing… (slop)');
+        } else {
+          setStatus('playing…');
+        }
+        // slight delay so the editor applies the new code before evaluate
+        setTimeout(() => {
+          document.dispatchEvent(new CustomEvent('repl-evaluate', { cancelable: true }));
+        }, 50);
+      } catch {
+        setStatus('error');
+      }
     });
 
     stopBtn.addEventListener('click', () => {
-      setStatus('stopped');
+      stopClicks += 1;
+      if(stopClicks >= 5){
+        stopClicks = 0;
+        slopMode = !slopMode;
+        setStatus(slopMode ? 'slop armed' : 'stopped');
+      } else {
+        setStatus('stopped');
+      }
       document.dispatchEvent(new CustomEvent('repl-stop', { cancelable: true }));
     });
 
@@ -194,6 +261,7 @@
         const r = await fetch(`${v.file}?v=${CACHE_BUST}`);
         if (!r.ok) throw new Error(`${v.file} ${r.status}`);
         const code = await r.text();
+        currentCode = code;
         await customElements.whenDefined('strudel-editor');
         repl.setAttribute('code', code);
         setStatus('ready');
