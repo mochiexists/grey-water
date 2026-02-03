@@ -1,0 +1,12 @@
+# audio + big assets (we'll add later via LFS/R2)
+*.wav
+*.aif
+*.aiff
+*.mp3
+*.flac
+
+# macOS
+.DS_Store
+
+# node
+node_modules/

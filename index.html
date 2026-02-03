@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>grey water</title>
+  <script src="https://unpkg.com/@strudel/repl@latest"></script>
+  <style>
+    :root{
+      --bg:#0a0a0f;--fg:#c8c8d0;--muted:rgba(200,200,208,.55);--accent:#7c6f9c;
+      --panel:rgba(255,255,255,.03);--border:rgba(255,255,255,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--fg);font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;}
+    .wrap{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+    aside{border-right:1px solid var(--border);background:var(--panel);padding:18px 14px;}
+    main{padding:18px;}
+    h1{margin:0 0 8px 0;font-size:13px;font-weight:500;letter-spacing:.28em;text-transform:lowercase;opacity:.85}
+    .sub{margin:0 0 14px 0;font-size:11px;line-height:1.45;color:var(--muted)}
+    .pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:11px;opacity:.8;margin-top:8px}
+    .section-title{margin:18px 0 8px 0;font-size:11px;letter-spacing:.2em;text-transform:lowercase;opacity:.55}
+    .versions{display:flex;flex-direction:column;gap:6px}
+    .vbtn{width:100%;text-align:left;background:transparent;border:1px solid var(--border);color:var(--fg);
+      padding:10px 10px;border-radius:8px;cursor:pointer;transition:all .15s ease;opacity:.85}
+    .vbtn:hover{border-color:rgba(124,111,156,.7);box-shadow:0 0 0 1px rgba(124,111,156,.25) inset}
+    .vbtn.active{border-color:rgba(124,111,156,.9);box-shadow:0 0 0 1px rgba(124,111,156,.35) inset;opacity:1}
+    .vmeta{display:block;margin-top:6px;font-size:10px;color:var(--muted)}
+    .links a{color:var(--accent);text-decoration:none;font-size:11px;opacity:.8}
+    .links a:hover{opacity:1;color:var(--fg)}
+    strudel-repl{max-width:1100px;display:block}
+    .hint{font-size:11px;color:var(--muted);margin:0 0 10px 0}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <aside>
+      <h1>grey water</h1>
+      <p class="sub">footwork (160) from the memory laundromat. each commit can mint a new saved version here. pick a version → click ▶ in the repl.</p>
+      <div class="pill">528 hz</div>
+
+      <div class="section-title">versions</div>
+      <div class="versions" id="versions"></div>
+
+      <div class="section-title">notes</div>
+      <p class="sub">v0 uses built-in drums while we hunt laundromat field recordings (washers, coins, latch clicks). next: replace clicks with real samples.</p>
+
+      <div class="section-title">links</div>
+      <div class="links">
+        <a href="./README.md">readme</a>
+      </div>
+    </aside>
+
+    <main>
+      <p class="hint">tip: if audio doesn’t start, click the page once (browser autoplay rules).</p>
+      <strudel-repl id="repl"></strudel-repl>
+    </main>
+  </div>
+
+  <script type="module">
+    const versions = await fetch('./versions.json').then(r => r.json());
+    const versionsEl = document.getElementById('versions');
+    const repl = document.getElementById('repl');
+
+    async function loadVersion(v){
+      const code = await fetch(v.file).then(r => r.text());
+      repl.setAttribute('code', code);
+      [...versionsEl.querySelectorAll('.vbtn')].forEach(b => b.classList.remove('active'));
+      const btn = versionsEl.querySelector(`[data-id="${v.id}"]`);
+      if(btn) btn.classList.add('active');
+      history.replaceState({}, '', `#${v.id}`);
+    }
+
+    versions.forEach(v => {
+      const b = document.createElement('button');
+      b.className = 'vbtn';
+      b.dataset.id = v.id;
+      b.innerHTML = `${v.label}<span class="vmeta">${v.date}</span>`;
+      b.addEventListener('click', () => loadVersion(v));
+      versionsEl.appendChild(b);
+    });
+
+    const initialId = location.hash?.slice(1) || versions[0]?.id;
+    const initial = versions.find(x => x.id === initialId) || versions[0];
+    if(initial) await loadVersion(initial);
+  </script>
+</body>
+</html>
