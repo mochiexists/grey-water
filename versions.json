@@ -4,5 +4,11 @@
     "label": "v0 — first footwork sketch (built-in drums)",
     "file": "patterns/versions/v0.js",
     "date": "2026-02-03"
+  },
+  {
+    "id": "v01",
+    "label": "v0.1 — groove pass + snare/clap separation + vacuum last-16th",
+    "file": "patterns/versions/v01.js",
+    "date": "2026-02-04"
   }
 ]
