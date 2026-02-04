@@ -168,21 +168,35 @@
     }
 
     // "slop" easter egg: click stop 5x to arm slop mode.
+    // Slop is now a VIP mix: one stable mutation per arm (seeded + cached).
     let stopClicks = 0;
     let slopMode = false;
+    let slopSeed = 0;
+    let slopCode = '';
     let currentCode = '';
 
-    function randChoice(arr){
-      return arr[Math.floor(Math.random() * arr.length)];
+    // deterministic RNG (mulberry32)
+    function rng32(seed){
+      let t = seed >>> 0;
+      return function(){
+        t += 0x6D2B79F5;
+        let x = Math.imul(t ^ (t >>> 15), 1 | t);
+        x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+        return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+      };
     }
 
-    function randStruct(len = 16, density = 0.5){
+    function randChoice(r, arr){
+      return arr[Math.floor(r() * arr.length)];
+    }
+
+    function randStruct(r, len = 16, density = 0.5){
       // returns a string like "x ~ x x ~ ..." with occasional doubles
       const toks = [];
       for(let i=0;i<len;i++){
-        const r = Math.random();
-        if(r < density){
-          toks.push(Math.random() < 0.15 ? '[x x]' : 'x');
+        const rv = r();
+        if(rv < density){
+          toks.push(r() < 0.15 ? '[x x]' : 'x');
         } else {
           toks.push('~');
         }
@@ -193,21 +207,25 @@
       return groups.join('  ');
     }
 
-    function makeSlop(code){
+    function makeSlop(code, seed){
+      const r = rng32(seed);
+
       // turn const -> let so we can mutate layers after definition
       let out = code.replace(/^const\s+/gm, 'let ');
-      const bpmDelta = randChoice([-12,-8,-4,0,4,8,12]);
-      const kickDensity = 0.55 + Math.random()*0.25;
-      const hatDensity = 0.55 + Math.random()*0.25;
-      const panAmt = (0.2 + Math.random()*0.5).toFixed(2);
+
+      const bpmDelta = randChoice(r, [-12,-8,-4,0,4,8,12]);
+      const kickDensity = 0.55 + r()*0.25;
+      const hatDensity = 0.55 + r()*0.25;
+      const panAmt = (0.2 + r()*0.5).toFixed(2);
 
       out += `\n\n// --- slop mode armed (secret) ---\n`;
-      out += `// stop x5 → slop. play again → the laundromat jitters.\n`;
+      out += `// stop x5 → slop (vip mix). stable until you disarm/re-arm.\n`;
+      out += `// seed: ${seed}\n`;
       out += `BPM = Math.max(120, Math.min(180, BPM + (${bpmDelta})));\n`;
-      out += `kicks = kicks.struct(\"${randStruct(16, kickDensity)}\").gain(${(0.7+Math.random()*0.4).toFixed(2)});\n`;
-      out += `hats = hats.struct(\"${randStruct(8, hatDensity)}\").gain(${(0.2+Math.random()*0.5).toFixed(2)}).pan(sine.range(-${panAmt}, ${panAmt}).slow(${(1+Math.random()*4).toFixed(2)}));\n`;
-      out += `clicks = clicks.gain(${(0.05+Math.random()*0.18).toFixed(2)}).delaytime(${(0.0625*randChoice([1,2,3,4])).toFixed(4)});\n`;
-      out += `vacuum = vacuum.struct(\"${randStruct(16, 0.18)}\").gain(${(0.08+Math.random()*0.25).toFixed(2)});\n`;
+      out += `kicks = kicks.struct(\"${randStruct(r, 16, kickDensity)}\").gain(${(0.7+r()*0.4).toFixed(2)});\n`;
+      out += `hats = hats.struct(\"${randStruct(r, 8, hatDensity)}\").gain(${(0.2+r()*0.5).toFixed(2)}).pan(sine.range(-${panAmt}, ${panAmt}).slow(${(1+r()*4).toFixed(2)}));\n`;
+      out += `clicks = clicks.gain(${(0.05+r()*0.18).toFixed(2)}).delaytime(${(0.0625*randChoice(r,[1,2,3,4])).toFixed(4)});\n`;
+      out += `vacuum = vacuum.struct(\"${randStruct(r, 16, 0.18)}\").gain(${(0.08+r()*0.25).toFixed(2)});\n`;
       out += `// re-stack with mutated layers\n`;
       out += `stack(hum, kicks, snare, claps, hats, clicks, vacuum).cpm(BPM/4)\n`;
 
@@ -217,12 +235,17 @@
     playBtn.addEventListener('click', async () => {
       try {
         await customElements.whenDefined('strudel-editor');
+
         if(slopMode && currentCode){
-          repl.setAttribute('code', makeSlop(currentCode));
-          setStatus('playing… (slop)');
+          if(!slopCode){
+            slopCode = makeSlop(currentCode, slopSeed);
+          }
+          repl.setAttribute('code', slopCode);
+          setStatus('playing… (slop vip)');
         } else {
           setStatus('playing…');
         }
+
         // slight delay so the editor applies the new code before evaluate
         setTimeout(() => {
           document.dispatchEvent(new CustomEvent('repl-evaluate', { cancelable: true }));
@@ -237,7 +260,14 @@
       if(stopClicks >= 5){
         stopClicks = 0;
         slopMode = !slopMode;
-        setStatus(slopMode ? 'slop armed' : 'stopped');
+        if(slopMode){
+          slopSeed = Date.now() % 2147483647;
+          slopCode = '';
+          setStatus('slop armed');
+        } else {
+          slopCode = '';
+          setStatus('stopped');
+        }
       } else {
         setStatus('stopped');
       }
