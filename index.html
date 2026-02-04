@@ -175,9 +175,20 @@
     let slopCode = '';
     let currentCode = '';
 
+    // stable string hash (fnv-1a 32-bit)
+    function hash32(str){
+      let h = 0x811c9dc5;
+      for(let i=0;i<str.length;i++){
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+      }
+      return h >>> 0;
+    }
+
     // deterministic RNG (mulberry32)
     function rng32(seed){
-      let t = seed >>> 0;
+      seed = seed >>> 0;
+      let t = seed;
       return function(){
         t += 0x6D2B79F5;
         let x = Math.imul(t ^ (t >>> 15), 1 | t);
@@ -261,7 +272,10 @@
         stopClicks = 0;
         slopMode = !slopMode;
         if(slopMode){
-          slopSeed = Date.now() % 2147483647;
+          const base = hash32('mochiexists');
+          const arm = parseInt(localStorage.getItem('greywater_slop_arm')||'0',10)+1;
+          localStorage.setItem('greywater_slop_arm', String(arm));
+          slopSeed = (base + arm) >>> 0;
           slopCode = '';
           setStatus('slop armed');
         } else {
